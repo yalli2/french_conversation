@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Français Conversation — 프랑스어 회화 인터랙티브 학습</title>
+<meta name="description" content="국제학교 프랑스어 회화 수업용 인터랙티브 학습 사이트: 18개 단원의 대화문, 문법, 어휘, 자동 채점 연습문제와 원어민 음성">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar"><div class="in">
+  <a class="brand" href="index.html"><span class="flag"><i></i><i></i><i></i></span> <span class="bt">Français Conversation</span></a>
+  <span class="sp"></span>
+  <button class="btn sm" onclick="FC.voicePanel()">🔊 <span class="bt2">음성</span></button>
+</div></header>
+
+<section class="hero"><div class="in">
+  <div style="font-weight:800;letter-spacing:2px;font-size:13px;opacity:.85">COURS DE CONVERSATION · NIVEAU A1 → A2</div>
+  <h1>Parlons français ! 🇫🇷</h1>
+  <p>프랑스어 회화 수업에서 함께 쓰는 인터랙티브 학습 사이트입니다. 각 단원마다 <b>대화문 듣기·역할극</b>, <b>핵심 문법</b>, <b>어휘 카드</b>, 그리고 바로 채점되는 <b>연습문제</b>가 준비되어 있어요. 프랑스어 문장은 클릭하면 원어민 음성으로 들을 수 있습니다.</p>
+  <div class="stats">
+    <div class="stat"><b>18</b>단원 + 발음</div>
+    <div class="stat"><b id="sEx">–</b>연습문제</div>
+    <div class="stat"><b id="sDone">0</b>완료한 연습문제</div>
+    <div class="stat"><b id="sAvg">–</b>평균 점수</div>
+  </div>
+</div></section>
+
+<main class="wrap">
+  <div class="toolbar">
+    <input class="search" id="q" placeholder="🔎 단원·문법·주제 검색 (예: 복합과거, 날씨, passé composé, vêtements)">
+    <button class="btn" onclick="FC.voicePanel()">🔊 음성 테스트</button>
+    <button class="btn" id="resetAll">↺ 기록 초기화</button>
+  </div>
+  <div class="sec-title"><h2>📚 Les unités</h2><span class="muted" id="count"></span></div>
+  <div class="grid" id="grid"></div>
+
+  <div class="card" style="margin-top:30px">
+    <h2>🧭 사용 방법</h2>
+    <div class="notes">
+      <ul>
+        <li><b>💬 Dialogue</b> — ▶ 전체 듣기로 대화를 듣고, 🐢 천천히 듣기로 다시 확인하세요. <b>🎭 역할극</b>에서 인물을 고르면 그 대사가 가려지고, 그 시간 동안 직접 말해 볼 수 있어요. 🎤 따라 말하기는 발음 정확도를 % 로 보여 줍니다 (Chrome/Edge).</li>
+        <li><b>📘 Grammaire</b> — 밑줄 점선이 있는 프랑스어 예문은 클릭하면 바로 발음을 들려줍니다.</li>
+        <li><b>✏️ Exercices</b> — 답을 입력하고 <b>채점하기</b>를 누르면 문항별 정답·오답과 점수가 표시되고, 최고 점수가 이 기기에 저장됩니다. 악센트만 틀린 경우에는 정답으로 인정하되 노란색으로 알려 줍니다.</li>
+        <li><b>🔊 음성</b> — 가장 자연스러운 원어민 발음은 <b>Microsoft Edge</b>의 Natural 음성(Denise, Henri, Vivienne, Remy), Chrome의 Google français, Apple 기기의 Amélie/Thomas입니다. 상단 <b>음성 설정</b>에서 고르세요.</li>
+      </ul>
+    </div>
+  </div>
+</main>
+<footer class="footer">Français Conversation · 국제학교 프랑스어 회화 수업용 학습 사이트 · 다인에듀 후안샘<br>모든 대화문과 연습문제는 수업용으로 새로 각색·작성되었습니다.</footer>
+
+<script src="assets/units.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  const files = FC.META.map(m => 'data/u' + String(m.n).padStart(2,'0') + '.js');
+  let loaded = 0;
+  files.forEach(f => { const s = document.createElement('script'); s.src = f; s.onload = s.onerror = () => { if (++loaded === files.length) draw(); }; document.body.appendChild(s); });
+  function draw(){
+    const q = document.getElementById('q').value.trim().toLowerCase();
+    let exTotal = 0, done = 0, sum = 0, cnt = 0, shown = 0;
+    const html = FC.META.map(m => {
+      const U = FC.units[m.n]; const p = U ? FC.progress.unit(m.n) : {done:0,total:0,pct:0};
+      exTotal += p.total; done += p.done; if (p.done) { sum += p.pct; cnt++; }
+      const hay = [m.fr, m.ko, m.en, ...(m.tags||[]), ...((U&&U.goals)||[])].join(' ').toLowerCase();
+      if (q && !hay.includes(q)) return '';
+      shown++;
+      const pc = p.total ? Math.round(100 * p.done / p.total) : 0;
+      return `<a class="ucard" href="unit.html?u=${m.n}"><span class="emoji">${m.emoji}</span>
+        <span class="num">${m.n===0?'INTRODUCTION':'UNITÉ '+m.n}</span><h3 class="fr">${m.fr}</h3><div class="ko">${m.ko} · <i>${m.en}</i></div>
+        <div class="tags">${(m.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
+        <div class="bar"><i style="width:${pc}%"></i></div>
+        <div class="foot"><span>✏️ ${p.done}/${p.total} 연습문제</span><span>${p.done? '점수 '+p.pct+'%':'시작하기 →'}</span></div></a>`;
+    }).join('');
+    document.getElementById('grid').innerHTML = html || '<p class="muted">검색 결과가 없습니다.</p>';
+    document.getElementById('count').textContent = shown + '개 단원';
+    document.getElementById('sEx').textContent = exTotal;
+    document.getElementById('sDone').textContent = done;
+    document.getElementById('sAvg').textContent = cnt ? Math.round(sum / cnt) + '%' : '–';
+  }
+  FC.drawIndex = draw;
+  document.getElementById('q').addEventListener('input', () => draw());
+  document.getElementById('resetAll').onclick = () => {
+    if (!confirm('이 기기에 저장된 모든 점수 기록을 지울까요?')) return;
+    Object.keys(localStorage).filter(k => /^fc_u\d+_/.test(k)).forEach(k => localStorage.removeItem(k)); draw();
+  };
+})();
+</script>
+</body>
+</html>

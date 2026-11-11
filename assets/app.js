@@ -36,23 +36,45 @@ const TTS = {
     this.masc = byName(this.prefM) || masc[0] || this.voices.find(v=>v!==this.fem) || this.fem;
     document.dispatchEvent(new Event('fc-voices'));
   },
-  stop(){ if(window.speechSynthesis) speechSynthesis.cancel(); document.querySelectorAll('.playing').forEach(e=>e.classList.remove('playing')); },
-  speak(text, opt={}){
+  stop(){ this.token++; if(window.speechSynthesis) speechSynthesis.cancel(); document.querySelectorAll('.playing').forEach(e=>e.classList.remove('playing')); },
+  /* split long text into short chunks (Chrome stops after ~15 s) */
+  chunks(t){
+    const parts=t.match(/[^.!?…;:]+[.!?…;:]*/g)||[t]; const out=[]; let cur='';
+    parts.forEach(p=>{ if((cur+p).length>180 && cur){ out.push(cur.trim()); cur=p; } else cur+=p; });
+    if(cur.trim()) out.push(cur.trim()); return out;
+  },
+  speakOne(text,opt){
     return new Promise(res=>{
-      if(!window.speechSynthesis){ toast('이 브라우저는 음성 기능을 지원하지 않아요. Chrome/Edge를 사용해 주세요.'); return res(); }
-      const clean = String(text).replace(/<[^>]+>/g,'').replace(/_+/g,' … ').replace(/\s+/g,' ').trim();
-      const u = new SpeechSynthesisUtterance(clean);
+      const u = new SpeechSynthesisUtterance(text);
       u.lang='fr-FR';
+      if(!this.voices.length) this.load();
       const v = opt.g==='m' ? this.masc : this.fem;
-      if(v) u.voice=v;
-      u.rate = (opt.rate||1)*this.rate;
+      if(v){ u.voice=v; u.lang=v.lang; }
+      u.rate = Math.min(2,Math.max(0.5,(opt.rate||1)*this.rate));
       u.pitch = (v && this.fem===this.masc && opt.g==='m') ? 0.8 : 1;
-      if(opt.el) opt.el.classList.add('playing');
-      const done=()=>{ if(opt.el) opt.el.classList.remove('playing'); res(); };
+      u.volume = 1;
+      let finished=false;
+      const done=()=>{ if(finished) return; finished=true; clearInterval(keep); clearTimeout(guard); res(); };
       u.onend=done; u.onerror=done;
+      // Chrome keep-alive & safety timeout
+      const keep=setInterval(()=>{ if(speechSynthesis.paused) speechSynthesis.resume(); },4000);
+      const guard=setTimeout(done, 4000 + text.length*150/(u.rate||1));
+      speechSynthesis.resume();
       speechSynthesis.speak(u);
     });
-  }
+  },
+  async speak(text, opt={}){
+    if(!('speechSynthesis' in window)){ toast('이 브라우저는 음성 기능을 지원하지 않아요. Chrome·Edge·Safari를 사용해 주세요.'); return; }
+    const clean = String(text).replace(/<[^>]+>/g,'').replace(/_+/g,' … ').replace(/\s+/g,' ').trim();
+    if(!clean) return;
+    if(!this.voices.length) this.load();
+    if(!this.voices.length && !this._warned){ this._warned=true; toast('⚠️ 이 기기에 프랑스어 음성이 없어 기본 음성으로 읽어요. 🔊 음성 설정의 안내를 확인하세요.'); }
+    const my = ++this.token;
+    if(opt.el) opt.el.classList.add('playing');
+    for(const c of this.chunks(clean)){ if(my!==this.token) break; await this.speakOne(c,opt); }
+    if(opt.el) opt.el.classList.remove('playing');
+  },
+  token:0
 };
 FC.TTS = TTS;
 if(window.speechSynthesis){
@@ -60,7 +82,9 @@ if(window.speechSynthesis){
   speechSynthesis.onvoiceschanged = ()=>TTS.load();
   setTimeout(()=>TTS.load(),600);
 }
-FC.say = (t,o)=>{ TTS.stop(); return TTS.speak(t,o); };
+FC.say = (t,o)=>{ const busy = window.speechSynthesis && (speechSynthesis.speaking||speechSynthesis.pending); TTS.stop(); return new Promise(r=>setTimeout(r, busy?120:0)).then(()=>TTS.speak(t,o)); };
+/* unlock audio on first touch (iOS/Safari) */
+document.addEventListener('pointerdown',function un(){ try{ if(window.speechSynthesis){ const u=new SpeechSynthesisUtterance(' '); u.volume=0; speechSynthesis.speak(u);} }catch(e){} document.removeEventListener('pointerdown',un,true); },true);
 
 /* click any .say element to hear it */
 document.addEventListener('click', e=>{
@@ -190,7 +214,7 @@ R.dialogue = (s,U)=>{
 R.bindDialogue=(el,s)=>{
   const lineEls=[...el.querySelectorAll('.dl-line')];
   let stop=false;
-  const playFrom=async(rate)=>{ TTS.stop(); stop=false; await new Promise(r=>setTimeout(r,60));
+  const playFrom=async(rate)=>{ TTS.stop(); stop=false; await new Promise(r=>setTimeout(r,150));
     for(let i=0;i<s.lines.length && !stop;i++){
       const le=lineEls[i];
       if(le.classList.contains('masked')){ le.classList.add('playing'); await new Promise(r=>setTimeout(r,Math.max(1800, s.lines[i].fr.length*90))); le.classList.remove('playing'); continue; }
@@ -219,7 +243,7 @@ R.vocab = s=>`<h2><span class="badge" style="background:#0f7b6c">Vocabulaire</sp
 R.bindVocab=(el,s)=>{
   el.querySelector('[data-flash]').onclick=e=>{const v=el.querySelector('.vocab');v.classList.toggle('flash');e.target.textContent=v.classList.contains('flash')?'🃏 뜻 모두 보기':'🃏 뜻 가리기 (카드 모드)';};
   el.querySelector('.vocab').addEventListener('click',e=>{const it=e.target.closest('.vitem'); if(it) it.classList.add('show');});
-  el.querySelector('[data-vall]').onclick=async()=>{TTS.stop(); for(const [f] of s.items){ await TTS.speak(f,{}); await new Promise(r=>setTimeout(r,300)); }};
+  el.querySelector('[data-vall]').onclick=async()=>{TTS.stop(); await new Promise(r=>setTimeout(r,150)); for(const [f] of s.items){ await TTS.speak(f,{}); await new Promise(r=>setTimeout(r,300)); }};
 };
 R.bindReading=(el,s)=>{
   el.querySelector('[data-readall]').onclick=()=>FC.say(el.querySelector('.reading').innerText,{g:s.g||'f'});
